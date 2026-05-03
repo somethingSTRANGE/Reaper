@@ -102,22 +102,22 @@ max_deletes_per_run = 0   # 0 = unlimited; set a positive number as a safety cap
 
 ```sh
 dotnet build
-dotnet run --project src/Reaper -- preview C:\Users\mryan\Temp
+dotnet run --project Reaper -- preview <target-folder>
 dotnet test
 dotnet test --filter "FullyQualifiedName~Pruner"   # run a specific test class
-dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish Reaper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
 
 ## Project Layout
 
 ```
-src/Reaper/
+Reaper/
   Commands/       # one file per CLI command (StatusCommand, PreviewCommand, etc.)
   Db/             # SQLite access, schema, migrations
   Scanner/        # recursive FS walk, entry diffing
-  Pruner/         # flagging logic, folder atomicity pass, deletion
+  Pruner/         # flagging logic, folder atomicity pass, deletion (namespace: Reaper.Pruning)
   Config/         # .reaper.toml loading and merging with CLI flags
-tests/Reaper.Tests/
+Reaper.Tests/
 ```
 
 ## Design Notes & Edge Cases
@@ -136,5 +136,5 @@ tests/Reaper.Tests/
   - is a drive root (`C:\`, `D:\`, etc.)
 
   Paths to protect: `%WINDIR%`, `%SystemRoot%`, `%USERPROFILE%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%`, and all drive roots. Targeting a *descendant* of a protected path (e.g. `%USERPROFILE%\Temp`) is the primary intended use case and is explicitly allowed.
-- **Safety cap**: `max_deletes_per_run` in config prevents a misconfigured first run from wiping everything. Default is unlimited but consider documenting a recommended cap.
+- **Safety cap**: `max_deletes_per_run` counts individual file deletions. When the count reaches the limit, stop — no special folder-level logic. Folder atomicity only protects folders that contain at least one *retained* file; it does not prevent partial deletion of entirely stale folders. A folder whose flagged files are split across two runs by the cap is fine — the remainder is deleted on the next run. The cap and the atomicity rule are orthogonal.
 - **First run behavior**: an uninitialized folder gets a DB created and all entries timestamped NOW. Nothing is deleted on the first run. This is intentional — Reaper needs at least one full retention period to observe before it removes anything.

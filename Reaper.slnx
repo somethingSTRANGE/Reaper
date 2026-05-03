@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Reaper.Tests/Reaper.Tests.csproj" />
+  <Project Path="Reaper/Reaper.csproj" />
+</Solution>
