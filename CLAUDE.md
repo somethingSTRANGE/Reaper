@@ -22,7 +22,7 @@ The DB timestamp (`first_seen`, set to `NOW` on initial observation) is the auth
 
 On each `execute` run against a target `<root>`:
 
-1. Load `<root>/.reaper.db` (create if missing, equivalent to `init`)
+1. Abort if `<root>/.reaper.db` does not exist — the folder is not tracked. Print a clear error directing the user to run `reap init <path>` first.
 2. Scan all FS entries under `<root>` recursively (excluding `.reaper.db` and `.reaper.toml`)
 3. **Orphan cleanup**: remove DB entries with no corresponding FS entry
 4. **Per-entry evaluation**:
@@ -69,7 +69,7 @@ CREATE TABLE entries (
 | `reap preview <path>` | Read-only dry-run: list exactly what would be deleted, grouped by directory. Does **not** update DB timestamps — even files with newer FS timestamps will not have their `first_seen` reset until `execute` runs. |
 | `reap execute <path>` | Perform the prune |
 | `reap touch <root> <target>` | Reset `first_seen` to NOW for `<target>` (file or directory) within the DB at `<root>`. If `<target>` is a directory, resets all entries under it. `<target>` may be absolute or relative to `<root>`. |
-| `reap init <path>` | Create `.reaper.db` and `.reaper.toml` in the target folder without scanning |
+| `reap init <path>` | Create `.reaper.db` and `.reaper.toml` in the target folder without scanning. All other commands (`status`, `preview`, `execute`, `touch`) abort with a clear error if `.reaper.db` does not exist — `init` must be run first. If already initialized, `init` is a no-op (prints a note, exits 0). |
 
 **Common flags** (all commands that take `<path>`):
 
@@ -137,4 +137,4 @@ Reaper.Tests/
 
   Paths to protect: `%WINDIR%`, `%SystemRoot%`, `%USERPROFILE%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%`, and all drive roots. Targeting a *descendant* of a protected path (e.g. `%USERPROFILE%\Temp`) is the primary intended use case and is explicitly allowed.
 - **Safety cap**: `max_deletes_per_run` counts individual file deletions. When the count reaches the limit, stop — no special folder-level logic. Folder atomicity only protects folders that contain at least one *retained* file; it does not prevent partial deletion of entirely stale folders. A folder whose flagged files are split across two runs by the cap is fine — the remainder is deleted on the next run. The cap and the atomicity rule are orthogonal.
-- **First run behavior**: an uninitialized folder gets a DB created and all entries timestamped NOW. Nothing is deleted on the first run. This is intentional — Reaper needs at least one full retention period to observe before it removes anything.
+- **First run behavior**: `init` creates the DB and config scaffold but does not scan — the DB starts empty. The first `execute` run inserts all entries with `first_seen = NOW` and deletes nothing. This is intentional — Reaper needs at least one full retention period to observe before it removes anything.
