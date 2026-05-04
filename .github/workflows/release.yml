@@ -36,6 +36,7 @@ jobs:
           -r win-x64
           --self-contained
           -p:PublishSingleFile=true
+          -p:PublishTrimmed=true
           -p:Version=${{ steps.version.outputs.version }}
 
       - name: Create release
