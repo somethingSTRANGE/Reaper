@@ -8,6 +8,7 @@
 
     <AssemblyName>reap</AssemblyName>
     <ApplicationIcon>ReaperIcon.ico</ApplicationIcon>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <Version>1.0.1</Version>
     <Product>Reaper</Product>
     <Company>somethingSTRANGE</Company>
@@ -22,5 +23,11 @@
     <PackageReference Include="Tomlyn" Version="2.3.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Preserve Reaper and Spectre types so reflection-based CLI wiring survives trimming -->
+    <TrimmerRootAssembly Include="reap" />
+    <TrimmerRootAssembly Include="Spectre.Console.Cli" />
+    <TrimmerRootAssembly Include="Spectre.Console" />
+  </ItemGroup>
 
 </Project>
