@@ -1,6 +1,8 @@
 # Reaper
 
-Age-based pruning for scratch and temp directories.
+<img align="left" src="assets/ReaperIcon.png" width="110" alt="Reaper">
+
+**Age-based pruning for scratch and temp directories.**
 
 Reaper tracks when it first observed each file in a target folder, then removes files that have gone untouched beyond a configurable retention period. It uses a small SQLite database per folder rather than relying on filesystem timestamps, which are unreliable as age signals on Windows.
 
