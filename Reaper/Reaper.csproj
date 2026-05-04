@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
 
     <AssemblyName>reap</AssemblyName>
+    <ApplicationIcon>ReaperIcon.ico</ApplicationIcon>
     <Version>1.0.1</Version>
     <Product>Reaper</Product>
     <Company>somethingSTRANGE</Company>
