@@ -1,6 +1,9 @@
 using Reaper.Commands;
 using Spectre.Console.Cli;
 
+if (args is ["--version"])
+    args = ["version"];
+
 var app = new CommandApp();
 app.Configure(config =>
 {
