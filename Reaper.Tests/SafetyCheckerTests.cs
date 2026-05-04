@@ -53,4 +53,25 @@ public class SafetyCheckerTests
         var descendant = Path.Combine(Environment.GetEnvironmentVariable("USERPROFILE")!, "Temp");
         Assert.That(SafetyChecker.IsProtected(descendant), Is.False);
     }
+
+    [Test]
+    public void Descendant_of_WINDIR_is_blocked()
+    {
+        var descendant = Path.Combine(Environment.GetEnvironmentVariable("WINDIR")!, "Temp");
+        Assert.That(SafetyChecker.IsProtected(descendant), Is.True);
+    }
+
+    [Test]
+    public void Descendant_of_APPDATA_is_blocked()
+    {
+        var descendant = Path.Combine(Environment.GetEnvironmentVariable("APPDATA")!, "SomeApp");
+        Assert.That(SafetyChecker.IsProtected(descendant), Is.True);
+    }
+
+    [Test]
+    public void Descendant_of_LOCALAPPDATA_is_blocked()
+    {
+        var descendant = Path.Combine(Environment.GetEnvironmentVariable("LOCALAPPDATA")!, "SomeApp");
+        Assert.That(SafetyChecker.IsProtected(descendant), Is.True);
+    }
 }

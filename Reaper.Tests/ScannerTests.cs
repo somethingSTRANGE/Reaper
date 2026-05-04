@@ -100,20 +100,20 @@ public class ScannerTests
     }
 
     [Test]
-    public void Subdirectory_and_its_files_are_included()
+    public void Files_in_subdirectory_are_included()
     {
         Touch("Foo/bar.txt");
         Touch("Foo/baz.txt");
         var paths = Scanner.Scan(_root).Select(e => e.Path);
-        Assert.That(paths, Is.EquivalentTo(new[] { "Foo", "Foo/bar.txt", "Foo/baz.txt" }));
+        Assert.That(paths, Is.EquivalentTo(new[] { "Foo/bar.txt", "Foo/baz.txt" }));
     }
 
     [Test]
-    public void Empty_subdirectory_is_included()
+    public void Empty_subdirectory_is_not_tracked()
     {
         Mkdir("EmptyDir");
         var paths = Scanner.Scan(_root).Select(e => e.Path);
-        Assert.That(paths, Contains.Item("EmptyDir"));
+        Assert.That(paths, Is.Empty);
     }
 
     [Test]

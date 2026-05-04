@@ -20,8 +20,16 @@ public static class Scanner
 
             if (entry is DirectoryInfo subDir)
             {
-                if (!entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    // Symlink or junction: track as an opaque entry, never traverse
+                    var reparsePath = Path.GetRelativePath(root, entry.FullName).Replace('\\', '/');
+                    results.Add(new FsEntry(reparsePath, MaxTimestamp(entry)));
+                }
+                else
+                {
                     Walk(subDir, root, results);
+                }
                 continue;
             }
 

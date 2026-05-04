@@ -2,10 +2,21 @@ namespace Reaper.Safety;
 
 public static class SafetyChecker
 {
-    private static readonly string[] ProtectedEnvVars =
+    // Block the path itself, its ancestors, and all descendants.
+    // Nothing under these directories should ever be a reaping target.
+    private static readonly string[] StrictProtectedEnvVars =
     [
-        "WINDIR", "SystemRoot", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
-        "ProgramFiles", "ProgramFiles(x86)", "ProgramData"
+        "WINDIR", "SystemRoot",
+        "ProgramFiles", "ProgramFiles(x86)", "ProgramData",
+        "APPDATA", "LOCALAPPDATA"
+    ];
+
+    // Block the path itself and its ancestors, but NOT descendants.
+    // Subdirectories like %USERPROFILE%\Temp and %USERPROFILE%\Downloads
+    // are the primary intended use case.
+    private static readonly string[] ProfileProtectedEnvVars =
+    [
+        "USERPROFILE"
     ];
 
     public static bool IsProtected(string absolutePath)
@@ -16,18 +27,37 @@ public static class SafetyChecker
         if (IsDriveRoot(fullPath, target))
             return true;
 
-        foreach (var envVar in ProtectedEnvVars)
+        foreach (var envVar in StrictProtectedEnvVars)
         {
             var value = Environment.GetEnvironmentVariable(envVar);
             if (string.IsNullOrEmpty(value)) continue;
 
-            var protectedNorm = Normalize(Path.GetFullPath(value));
+            var norm = Normalize(Path.GetFullPath(value));
 
-            if (target.Equals(protectedNorm, StringComparison.OrdinalIgnoreCase))
+            if (target.Equals(norm, StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            // target is an ancestor of a protected path
-            if (protectedNorm.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            // target is an ancestor of this protected path
+            if (norm.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // target is a descendant of this protected path
+            if (target.StartsWith(norm + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        foreach (var envVar in ProfileProtectedEnvVars)
+        {
+            var value = Environment.GetEnvironmentVariable(envVar);
+            if (string.IsNullOrEmpty(value)) continue;
+
+            var norm = Normalize(Path.GetFullPath(value));
+
+            if (target.Equals(norm, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // target is an ancestor of this protected path
+            if (norm.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
