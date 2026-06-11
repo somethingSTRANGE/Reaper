@@ -117,7 +117,7 @@ public class ScannerTests
     }
 
     [Test]
-    public void Reaper_db_is_excluded()
+    public void Reaper_db_at_root_is_excluded()
     {
         Touch("a.txt");
         Touch(".reaper.db");
@@ -127,12 +127,42 @@ public class ScannerTests
     }
 
     [Test]
-    public void Reaper_toml_is_excluded()
+    public void Reaper_toml_at_root_is_excluded()
     {
         Touch("a.txt");
         Touch(".reaper.toml");
         var paths = Scanner.Scan(_root).Select(e => e.Path);
         Assert.That(paths, Does.Not.Contain(".reaper.toml"));
+    }
+
+    [Test]
+    public void Desktop_ini_at_root_is_excluded()
+    {
+        Touch("a.txt");
+        Touch("desktop.ini");
+        var paths = Scanner.Scan(_root).Select(e => e.Path);
+        Assert.That(paths, Does.Not.Contain("desktop.ini"));
+        Assert.That(paths, Contains.Item("a.txt"));
+    }
+
+    [Test]
+    public void Reaper_db_in_subdirectory_is_included()
+    {
+        Touch("Inner/.reaper.db");
+        Touch("Inner/.reaper.toml");
+        Touch("Inner/file.txt");
+        var paths = Scanner.Scan(_root).Select(e => e.Path);
+        Assert.That(paths, Contains.Item("Inner/.reaper.db"));
+        Assert.That(paths, Contains.Item("Inner/.reaper.toml"));
+    }
+
+    [Test]
+    public void Desktop_ini_in_subdirectory_is_included()
+    {
+        Touch("Sub/desktop.ini");
+        Touch("Sub/file.txt");
+        var paths = Scanner.Scan(_root).Select(e => e.Path);
+        Assert.That(paths, Contains.Item("Sub/desktop.ini"));
     }
 
     [Test]

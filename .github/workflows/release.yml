@@ -30,14 +30,9 @@ jobs:
         run: dotnet test --configuration Release
 
       - name: Publish
-        run: >-
-          dotnet publish Reaper
-          -c Release
-          -r win-x64
-          --self-contained
-          -p:PublishSingleFile=true
-          -p:PublishTrimmed=true
-          -p:Version=${{ steps.version.outputs.version }}
+        run: |
+          dotnet publish Reaper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:Version=${{ steps.version.outputs.version }}
+          dotnet publish Reaper.Silent -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:Version=${{ steps.version.outputs.version }}
 
       - name: Create release
         shell: pwsh
@@ -47,4 +42,5 @@ jobs:
           gh release create "${{ github.ref_name }}" `
             --title "${{ github.ref_name }}" `
             --generate-notes `
-            "Reaper\bin\Release\net10.0\win-x64\publish\reap.exe"
+            "Reaper\bin\Release\net10.0\win-x64\publish\reap.exe" `
+            "Reaper.Silent\bin\Release\net10.0\win-x64\publish\reap-silent.exe"

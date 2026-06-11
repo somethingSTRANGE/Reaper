@@ -85,35 +85,24 @@ public sealed class ExecuteCommand : Command<ExecuteCommand.Settings>
         }
 
         if (deleted.Count > 0)
-        {
             db.Delete(deleted);
-            if (config.DeleteEmptyDirs)
-                DeleteEmptyAncestors(root, deleted);
-        }
+
+        if (config.DeleteEmptyDirs)
+            DeleteEmptyDirs(root);
 
         var capNote = cap > 0 && attempted >= cap ? $" [grey](cap of {cap} reached)[/]" : "";
         AnsiConsole.MarkupLine($"[green]Done.[/] Deleted [bold]{deleted.Count}[/] file(s){capNote}.");
         return 0;
     }
 
-    private static void DeleteEmptyAncestors(string root, IEnumerable<string> deletedRelPaths)
+    private static void DeleteEmptyDirs(string root)
     {
-        var dirs = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in deletedRelPaths)
+        foreach (var dir in Directory
+            .EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+            .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar)))
         {
-            var parts = p.Split('/');
-            for (var i = 1; i < parts.Length; i++)
-                dirs.Add(string.Join('/', parts[..i]));
-        }
-
-        foreach (var dir in dirs.OrderByDescending(d => d.Length))
-        {
-            var absDir = Path.Combine(root, dir.Replace('/', Path.DirectorySeparatorChar));
-            if (Directory.Exists(absDir) &&
-                !Directory.EnumerateFileSystemEntries(absDir).Any())
-            {
-                try { Directory.Delete(absDir); } catch { }
-            }
+            if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                try { Directory.Delete(dir); } catch { }
         }
     }
 }

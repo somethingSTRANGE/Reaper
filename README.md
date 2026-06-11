@@ -23,7 +23,7 @@ Reaper sidesteps all of this. The `first_seen` timestamp in the database is set 
 On each `execute` run:
 
 1. Abort if the folder has not been initialised — `reap init` must be run first
-2. Scan all files recursively (excluding `.reaper.db` and `.reaper.toml`)
+2. Scan all files recursively (excluding `.reaper.db`, `.reaper.toml`, and `desktop.ini` at the root level)
 3. Remove database entries for files that no longer exist
 4. For each file on disk:
    - Not in database → record with `first_seen = now`; no deletion this run
@@ -48,9 +48,9 @@ Scratch/
 
 ## Installation
 
-Download `reap.exe` from the [Releases](../../releases) page. No installer, no runtime dependency — it is a self-contained single-file executable targeting Windows x64.
+Download `reap.exe` and `reap-silent.exe` from the [Releases](../../releases) page. Both are self-contained single-file executables targeting Windows x64 — no installer, no runtime dependency.
 
-Place it somewhere on your `PATH` (e.g. `C:\Tools\`) so you can run `reap` from any terminal.
+Place both files in the same folder on your `PATH` (e.g. `C:\Tools\`). They must live together: `reap-silent.exe` is a thin launcher used with Task Scheduler that delegates to `reap.exe` in the same directory.
 
 ## Quick start
 
@@ -71,14 +71,24 @@ reap init %USERPROFILE%\Downloads   # auto-prune old downloads
 
 ### Automating with Task Scheduler
 
-1. Open Task Scheduler and create a basic task
-2. Set the trigger to **Daily** (or whatever cadence suits you)
-3. Set the action to **Start a program**:
-   - Program: `C:\Tools\reap.exe`
-   - Arguments: `execute D:\Scratch\Temp`
-4. Under *Settings*, check **Run whether user is logged on or not**
+Use `reap-silent.exe` rather than `reap.exe` when scheduling. It starts `reap.exe` without allocating a console window, so nothing flashes on screen during scheduled runs.
 
-Reaper is designed for unattended operation. When stdout is not a terminal, rich formatting is suppressed automatically. Exit codes are the only signal when running under Task Scheduler — any non-zero exit indicates an error.
+**`schtasks` (one-liner):**
+
+```
+schtasks /create /tn "Reaper - Temp" /tr "\"C:\Tools\reap-silent.exe\" execute \"D:\Scratch\Temp\"" /sc daily /st 03:00
+```
+
+**PowerShell:**
+
+```powershell
+$action   = New-ScheduledTaskAction -Execute 'C:\Tools\reap-silent.exe' -Argument 'execute "D:\Scratch\Temp"'
+$trigger  = New-ScheduledTaskTrigger -Daily -At '3:00AM'
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName 'Reaper - Temp' -Action $action -Trigger $trigger -Settings $settings
+```
+
+Exit codes are the only signal when running under Task Scheduler — any non-zero exit indicates an error.
 
 ## Commands
 
@@ -168,10 +178,11 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/download).
 ```
 dotnet build
 dotnet test
-dotnet publish Reaper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish Reaper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true
+dotnet publish Reaper.Silent -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true
 ```
 
-The published binary appears at `Reaper\bin\Release\net10.0\win-x64\publish\reap.exe`.
+Published binaries appear at `Reaper\bin\Release\net10.0\win-x64\publish\reap.exe` and `Reaper.Silent\bin\Release\net10.0\win-x64\publish\reap-silent.exe`.
 
 ## License
 

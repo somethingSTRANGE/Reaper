@@ -23,7 +23,7 @@ The DB timestamp (`first_seen`, set to `NOW` on initial observation) is the auth
 On each `execute` run against a target `<root>`:
 
 1. Abort if `<root>/.reaper.db` does not exist — the folder is not tracked. Print a clear error directing the user to run `reap init <path>` first.
-2. Scan all FS entries under `<root>` recursively (excluding `.reaper.db` and `.reaper.toml`)
+2. Scan all FS entries under `<root>` recursively (excluding `<root>/.reaper.db`, `<root>/.reaper.toml`, and `<root>/desktop.ini` — root-level only)
 3. **Orphan cleanup**: remove DB entries with no corresponding FS entry
 4. **Per-entry evaluation**:
    - Not in DB → insert with `first_seen = NOW`; no removal action this run
@@ -106,6 +106,7 @@ dotnet run --project Reaper -- preview <target-folder>
 dotnet test
 dotnet test --filter "FullyQualifiedName~Pruner"   # run a specific test class
 dotnet publish Reaper -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish Reaper.Silent -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
 
 ## Project Layout
@@ -117,12 +118,13 @@ Reaper/
   Scanner/        # recursive FS walk, entry diffing
   Pruner/         # flagging logic, folder atomicity pass, deletion (namespace: Reaper.Pruning)
   Config/         # .reaper.toml loading and merging with CLI flags
+Reaper.Silent/    # silent launcher (WinExe) — produces reap-silent.exe for Task Scheduler use
 Reaper.Tests/
 ```
 
 ## Design Notes & Edge Cases
 
-- **The DB file itself** (`<root>/.reaper.db`) must always be excluded from all scans and deletion logic. Same for `.reaper.toml`.
+- **Root-only exclusions**: `<root>/.reaper.db`, `<root>/.reaper.toml`, and `<root>/desktop.ini` are excluded from all scans and deletion logic. These exclusions apply **only at the root level** — `.reaper.db` and `.reaper.toml` in subdirectories are tracked as regular files, enabling the nested-folder protection mechanism described below.
 - **Nested tracked folders**: do *not* explicitly exclude subdirectories that contain their own `.reaper.db`. The outer DB tracks the inner `.reaper.db` as a regular file. When the inner `execute` runs, it updates `.reaper.db`'s modified timestamp; the outer DB detects this as a recent touch and resets the clock, protecting the entire inner subtree via folder atomicity. An abandoned inner DB (whose `execute` is never run) will naturally age out and be cleaned up by the outer DB — explicit exclusion would prevent this and require manual deletion.
 - **Symlinks**: never follow — hardcoded, not configurable. A symlink is tracked as an opaque file entry (it ages, it can be deleted) but Reaper never traverses into a symlinked directory or resolves what a symlink points to. This is a safety invariant, not a preference.
 - **Empty directory deletion**: after file deletions, walk bottom-up and remove any directories that are now empty. This is a separate post-deletion pass, not part of the flagging logic.

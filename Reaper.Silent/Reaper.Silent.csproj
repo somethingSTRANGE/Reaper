@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <AssemblyName>reap-silent</AssemblyName>
+    <ApplicationIcon>..\Reaper\ReaperIcon.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
+    <Product>Reaper</Product>
+    <Company>somethingSTRANGE</Company>
+    <Copyright>Copyright © 2026 Michael Ryan</Copyright>
+    <Description>Silent launcher for reap.exe — use with Windows Task Scheduler to suppress the console window.</Description>
+  </PropertyGroup>
+
+</Project>

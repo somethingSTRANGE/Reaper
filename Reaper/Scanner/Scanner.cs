@@ -2,20 +2,23 @@ namespace Reaper.Scanning;
 
 public static class Scanner
 {
-    private static readonly HashSet<string> Excluded = [".reaper.db", ".reaper.toml"];
+    private static readonly HashSet<string> RootExcluded = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".reaper.db", ".reaper.toml", "desktop.ini"
+    };
 
     public static IReadOnlyList<FsEntry> Scan(string root)
     {
         var results = new List<FsEntry>();
-        Walk(new DirectoryInfo(root), root, results);
+        Walk(new DirectoryInfo(root), root, results, isRoot: true);
         return results;
     }
 
-    private static void Walk(DirectoryInfo dir, string root, List<FsEntry> results)
+    private static void Walk(DirectoryInfo dir, string root, List<FsEntry> results, bool isRoot)
     {
         foreach (var entry in dir.EnumerateFileSystemInfos())
         {
-            if (Excluded.Contains(entry.Name))
+            if (isRoot && RootExcluded.Contains(entry.Name))
                 continue;
 
             if (entry is DirectoryInfo subDir)
@@ -28,7 +31,7 @@ public static class Scanner
                 }
                 else
                 {
-                    Walk(subDir, root, results);
+                    Walk(subDir, root, results, isRoot: false);
                 }
                 continue;
             }
