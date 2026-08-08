@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
+  <defs>
+    <linearGradient id="blade" gradientUnits="userSpaceOnUse" x1="501" y1="64" x2="32" y2="256">
+      <stop offset="0%" stop-color="#cccccc" />
+      <stop offset="100%" stop-color="#333366" />
+    </linearGradient>
+    <linearGradient id="handle" gradientUnits="userSpaceOnUse" x1="612" y1="64" x2="350" y2="580">
+      <stop offset="0%" stop-color="#996600" />
+      <stop offset="100%" stop-color="#333300" />
+    </linearGradient>
+    <!-- Subtle drop shadow -->
+    <filter id="softShadow" filterUnits="userSpaceOnUse" x="0" y="0" width="640" height="640">
+      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#000000" flood-opacity="0.8" />
+    </filter>
+  </defs>
+  <g fill="url(#blade)" filter="url(#softShadow)">
+  <path d="M501 64L384 64C146.8 64 47 215.1 33.6 237.3C32.5 239.1 32 241.1 32 243.3C32 250.3 37.7 256 44.7 256L459.9 256L497.8 79.2L501 64z" />
+  </g>
+  <g fill="url(#handle)" filter="url(#softShadow)">
+  <path d="M474.9 416L448.7 537.3C445 554.6 456 571.6 473.3 575.3C490.6 579 507.6 568 511.3 550.7L606 112.4C611.4 87.5 592.4 64 566.9 64L551 64L488.7 352L384 352C366.3 352 352 366.3 352 384C352 401.7 366.3 416 384 416L474.9 416z" />
+  </g>
+</svg>

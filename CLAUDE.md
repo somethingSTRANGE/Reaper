@@ -119,9 +119,11 @@ dotnet publish Reaper.Silent -c Release -r win-x64 --self-contained -p:PublishSi
 Reaper/
   Commands/       # one file per CLI command (StatusCommand, PreviewCommand, etc.)
   Db/             # SQLite access, schema, migrations
-  Scanner/        # recursive FS walk, entry diffing
-  Pruner/         # flagging logic, folder atomicity pass, deletion (namespace: Reaper.Pruning)
+  Scanning/       # recursive FS walk, entry diffing
+  Pruning/        # flagging logic, folder atomicity pass, deletion
   Config/         # .reaper.toml loading and merging with CLI flags
+  Safety/         # protected-path checks
+  Scheduling/     # Task Scheduler detection (reap status / reap list)
 Reaper.Silent/    # silent launcher (WinExe) — produces reap-silent.exe for Task Scheduler use
 Reaper.Tests/
 ```

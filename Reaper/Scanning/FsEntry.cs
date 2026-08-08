@@ -1,3 +1,10 @@
+// -------------------------------------------------------------------------------------
+// <copyright file="FsEntry.cs">
+//   Copyright (c) 2026 Michael Ryan
+//   Licensed under the MIT License. See LICENSE file in the project root.
+// </copyright>
+// -------------------------------------------------------------------------------------
+
 namespace Reaper.Scanning;
 
 // Size is 0 for directory-type entries (symlinked/junction directories tracked as opaque

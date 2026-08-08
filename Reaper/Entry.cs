@@ -1,3 +1,10 @@
+// -------------------------------------------------------------------------------------
+// <copyright file="Entry.cs">
+//   Copyright (c) 2026 Michael Ryan
+//   Licensed under the MIT License. See LICENSE file in the project root.
+// </copyright>
+// -------------------------------------------------------------------------------------
+
 namespace Reaper;
 
 // FirstSeen is immutable after insert — a pure audit trail of when Reaper first noticed this

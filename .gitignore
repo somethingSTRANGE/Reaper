@@ -8,9 +8,6 @@ publish/
 *.suo
 *.user
 
-# JetBrains Rider
-.idea/
-
 # NuGet
 *.nupkg
 *.snupkg

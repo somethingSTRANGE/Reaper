@@ -1,113 +1,128 @@
+// -------------------------------------------------------------------------------------
+// <copyright file="Pipeline.cs">
+//   Copyright (c) 2026 Michael Ryan
+//   Licensed under the MIT License. See LICENSE file in the project root.
+// </copyright>
+// -------------------------------------------------------------------------------------
+
+namespace Reaper.Commands;
+
 using Reaper.Config;
 using Reaper.Db;
 using Reaper.Pruning;
 using Reaper.Safety;
 using Reaper.Scheduling;
-using Spectre.Console;
 
-namespace Reaper.Commands;
+using Spectre.Console;
 
 public static class Pipeline
 {
-    public const string DbFileName   = ".reaper.db";
-    public const string TomlFileName = ".reaper.toml";
+   public const string DbFileName = ".reaper.db";
 
-    public static string ResolveRoot(string rawPath) => Path.GetFullPath(rawPath);
+   public const string TomlFileName = ".reaper.toml";
 
-    public static bool CheckSafety(string absoluteRoot)
-    {
-        if (!SafetyChecker.IsProtected(absoluteRoot)) return true;
-        AnsiConsole.MarkupLine(
-            $"[red]Error:[/] [grey]{Markup.Escape(absoluteRoot)}[/] is a protected system path.");
-        return false;
-    }
+   public static bool CheckSafety(string absoluteRoot)
+   {
+      if (!SafetyChecker.IsProtected(absoluteRoot))
+      {
+         return true;
+      }
 
-    public static bool EnsureInitialized(string absoluteRoot)
-    {
-        if (File.Exists(Path.Combine(absoluteRoot, DbFileName))) return true;
-        AnsiConsole.MarkupLine(
-            $"[red]Error:[/] [grey]{Markup.Escape(absoluteRoot)}[/] is not tracked. " +
-            $"Run [yellow]reap init \"{Markup.Escape(absoluteRoot)}\"[/] first.");
-        return false;
-    }
+      AnsiConsole.MarkupLine($"[red]Error:[/] [grey]{Markup.Escape(absoluteRoot)}[/] is a protected system path.");
+      return false;
+   }
 
-    public static ReaperConfig LoadConfig(string absoluteRoot, int? daysOverride, string? configFile)
-    {
-        var tomlPath  = configFile ?? Path.Combine(absoluteRoot, TomlFileName);
-        var overrides = daysOverride.HasValue ? new CliOverrides(daysOverride) : null;
-        return ConfigLoader.Load(tomlPath, overrides);
-    }
+   public static bool EnsureInitialized(string absoluteRoot)
+   {
+      if (File.Exists(Path.Combine(absoluteRoot, DbFileName)))
+      {
+         return true;
+      }
 
-    public static string ResolveRelativeTarget(string absoluteRoot, string target)
-    {
-        var abs = Path.IsPathRooted(target)
-            ? target
-            : Path.GetFullPath(Path.Combine(absoluteRoot, target));
-        return Path.GetRelativePath(absoluteRoot, abs).Replace('\\', '/');
-    }
+      AnsiConsole.MarkupLine(
+         $"[red]Error:[/] [grey]{Markup.Escape(absoluteRoot)}[/] is not tracked. "
+         + $"Run [yellow]reap init \"{Markup.Escape(absoluteRoot)}\"[/] first.");
+      return false;
+   }
 
-    public static void PrintScheduleInfo(string absoluteRoot)
-    {
-        var tasks = ScheduledTaskLocator.FindTasksTargeting(absoluteRoot);
+   public static ReaperConfig LoadConfig(string absoluteRoot, int? daysOverride, string? configFile)
+   {
+      var tomlPath = configFile ?? Path.Combine(absoluteRoot, TomlFileName);
+      var overrides = daysOverride.HasValue ? new CliOverrides(daysOverride) : null;
+      return ConfigLoader.Load(tomlPath, overrides);
+   }
 
-        if (tasks.Count == 0)
-        {
-            AnsiConsole.MarkupLine(
-                "[red]Warning:[/] [grey]no Task Scheduler task targets this folder — reap will not run automatically.[/]");
-            return;
-        }
+   public static int Preview(string absoluteRoot, ReaperConfig config)
+   {
+      var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+      var retention = config.RetentionDays * 86_400L;
 
-        foreach (var task in tasks)
-        {
-            AnsiConsole.MarkupLine(
-                $"[grey]Scheduled task[/] [blue]{Markup.Escape(task.Name)}[/] " +
-                $"[grey]— next run:[/] {Markup.Escape(task.NextRunTime ?? "—")} " +
-                $"[grey]last run:[/] {Markup.Escape(task.LastRunTime ?? "—")} " +
-                $"[grey]result:[/] {Markup.Escape(task.LastResult ?? "—")}");
-        }
-    }
+      using var db = new ReaperDb(Path.Combine(absoluteRoot, DbFileName));
+      var entries = db.GetAll();
+      var toDelete = Pruner.FlagForRemoval(entries, retention, now);
 
-    public static int Preview(string absoluteRoot, ReaperConfig config)
-    {
-        var now       = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var retention = (long)config.RetentionDays * 86_400L;
+      if (toDelete.Count == 0)
+      {
+         AnsiConsole.MarkupLine("[grey]Nothing to delete.[/]");
+         return 0;
+      }
 
-        using var db = new ReaperDb(Path.Combine(absoluteRoot, DbFileName));
-        var entries  = db.GetAll();
-        var toDelete = Pruner.FlagForRemoval(entries, retention, now);
+      AnsiConsole.MarkupLine(
+         $"[yellow]Preview[/] — [bold]{toDelete.Count}[/] file(s) would be deleted "
+         + $"[grey](retention: {config.RetentionDays}d)[/]\n");
 
-        if (toDelete.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[grey]Nothing to delete.[/]");
-            return 0;
-        }
+      var byEntry = entries.ToDictionary(e => e.Path);
+      var printedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        AnsiConsole.MarkupLine(
-            $"[yellow]Preview[/] — [bold]{toDelete.Count}[/] file(s) would be deleted " +
-            $"[grey](retention: {config.RetentionDays}d)[/]\n");
+      foreach (var path in toDelete.OrderBy(p => p))
+      {
+         var parts = path.Split('/');
 
-        var byEntry     = entries.ToDictionary(e => e.Path);
-        var printedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var path in toDelete.OrderBy(p => p))
-        {
-            var parts = path.Split('/');
-
-            for (var i = 0; i < parts.Length - 1; i++)
+         for (var i = 0; i < parts.Length - 1; i++)
+         {
+            var dirPath = string.Join('/', parts[..(i + 1)]);
+            if (printedDirs.Add(dirPath))
             {
-                var dirPath = string.Join('/', parts[..(i + 1)]);
-                if (printedDirs.Add(dirPath))
-                    AnsiConsole.MarkupLine(
-                        $"{new string(' ', (i + 1) * 2)}[blue]{Markup.Escape(parts[i])}/[/]");
+               AnsiConsole.MarkupLine($"{new string(' ', (i + 1) * 2)}[blue]{Markup.Escape(parts[i])}/[/]");
             }
+         }
 
-            var age = byEntry.TryGetValue(path, out var entry)
-                ? (int)((now - entry.RefreshedAt) / 86_400)
-                : 0;
-            AnsiConsole.MarkupLine(
-                $"{new string(' ', parts.Length * 2)}{Markup.Escape(parts[^1])}  [grey]{age}d[/]");
-        }
+         var age = byEntry.TryGetValue(path, out var entry) ? (int)((now - entry.RefreshedAt) / 86_400) : 0;
+         AnsiConsole.MarkupLine($"{new string(' ', parts.Length * 2)}{Markup.Escape(parts[^1])}  [grey]{age}d[/]");
+      }
 
-        return 0;
-    }
+      return 0;
+   }
+
+   public static void PrintScheduleInfo(string absoluteRoot)
+   {
+      var tasks = ScheduledTaskLocator.FindTasksTargeting(absoluteRoot);
+
+      if (tasks.Count == 0)
+      {
+         AnsiConsole.MarkupLine(
+            "[red]Warning:[/] [grey]no Task Scheduler task targets this folder — reap will not run automatically.[/]");
+         return;
+      }
+
+      foreach (var task in tasks)
+      {
+         AnsiConsole.MarkupLine(
+            $"[grey]Scheduled task[/] [blue]{Markup.Escape(task.Name)}[/] "
+            + $"[grey]— next run:[/] {Markup.Escape(task.NextRunTime ?? "—")} "
+            + $"[grey]last run:[/] {Markup.Escape(task.LastRunTime ?? "—")} "
+            + $"[grey]result:[/] {Markup.Escape(task.LastResult ?? "—")}");
+      }
+   }
+
+   public static string ResolveRelativeTarget(string absoluteRoot, string target)
+   {
+      var abs = Path.IsPathRooted(target) ? target : Path.GetFullPath(Path.Combine(absoluteRoot, target));
+      return Path.GetRelativePath(absoluteRoot, abs).Replace('\\', '/');
+   }
+
+   public static string ResolveRoot(string rawPath)
+   {
+      return Path.GetFullPath(rawPath);
+   }
 }

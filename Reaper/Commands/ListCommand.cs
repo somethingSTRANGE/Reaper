@@ -1,4 +1,13 @@
+// -------------------------------------------------------------------------------------
+// <copyright file="ListCommand.cs">
+//   Copyright (c) 2026 Michael Ryan
+//   Licensed under the MIT License. See LICENSE file in the project root.
+// </copyright>
+// -------------------------------------------------------------------------------------
+
 namespace Reaper.Commands;
+
+using System.Diagnostics.CodeAnalysis;
 
 using Reaper.Db;
 using Reaper.Pruning;
@@ -6,6 +15,7 @@ using Reaper.Pruning;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
 public sealed class ListCommand : Command<ListCommand.Settings>
 {
    protected override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -84,6 +94,7 @@ public sealed class ListCommand : Command<ListCommand.Settings>
       return unit == 0 ? $"{bytes} {units[unit]}" : $"{size:0.#} {units[unit]}";
    }
 
+   [SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
    public sealed class Settings : ConfigurableSettings
    {
    }
