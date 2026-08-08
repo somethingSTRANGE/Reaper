@@ -8,7 +8,7 @@
 
     <AssemblyName>reap-silent</AssemblyName>
     <ApplicationIcon>..\Reaper\ReaperIcon.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>Reaper</Product>
     <Company>somethingSTRANGE</Company>
     <Copyright>Copyright © 2026 Michael Ryan</Copyright>

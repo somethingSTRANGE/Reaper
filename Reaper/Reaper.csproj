@@ -9,7 +9,7 @@
     <AssemblyName>reap</AssemblyName>
     <ApplicationIcon>ReaperIcon.ico</ApplicationIcon>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>Reaper</Product>
     <Company>somethingSTRANGE</Company>
     <Copyright>Copyright © 2026 Michael Ryan</Copyright>
