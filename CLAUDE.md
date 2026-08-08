@@ -13,10 +13,10 @@ Filesystem timestamps are untrustworthy as age signals:
 - **Same-volume move**: creation and modified timestamps are preserved — the file appears older than it is
 - **Cross-volume move**: equivalent to copy+delete, so creation is touched but modified is still the original
 - **Archive extraction**: creation may be touched, but modified typically reflects the timestamp stored inside the archive
-- **LastAccess on Windows**: `NtfsDisableLastAccessUpdate` is enabled by default on modern Windows; file reads do not update LastAccess
+- **LastAccess on Windows**: `NtfsDisableLastAccessUpdate` is documented as enabled by default on modern Windows, implying file reads shouldn't update LastAccess — but this has been observed to not hold in practice (AV scanning, indexing, and even routine directory reads have bumped it on a real machine despite the setting reporting disabled). It cannot be trusted as a "nothing touched this file" signal.
 - **Folder LastAccess**: reading a file inside a folder does not reliably update the folder's own LastAccess stamp; folder timestamps are especially unreliable
 
-The DB timestamp (`first_seen`, set to `NOW` on initial observation) is the authoritative age signal. FS timestamps are only consulted as signals that a file has been *externally modified* since it was first seen.
+The DB timestamp (`first_seen`, set to `NOW` on initial observation) is the authoritative age signal. FS timestamps are only consulted as signals that a file has been *externally modified* since it was first seen — specifically `created` and `modified`. LastAccess is deliberately excluded from that check (see Core Algorithm below): a signal that can advance on its own, without the file's content or identity changing, would perpetually reset `first_seen` on every scan and defeat the entire premise of DB-backed tracking.
 
 ## Core Algorithm
 
@@ -26,9 +26,9 @@ On each `execute` run against a target `<root>`:
 2. Scan all FS entries under `<root>` recursively (excluding `<root>/.reaper.db`, `<root>/.reaper.toml`, and `<root>/desktop.ini` — root-level only)
 3. **Orphan cleanup**: remove DB entries with no corresponding FS entry
 4. **Per-entry evaluation**:
-   - Not in DB → insert with `first_seen = NOW`; no removal action this run
-   - In DB and `max(fs.created, fs.modified, fs.accessed) > db.first_seen` → update `first_seen = NOW` (file was externally touched); no removal action this run
-   - In DB and `first_seen` is older than the retention threshold → flag for removal
+   - Not in DB → insert with `first_seen = NOW`, `refreshed_at = NOW`, `size = fs.size`; no removal action this run
+   - In DB and (`max(fs.created, fs.modified) > db.refreshed_at` OR `fs.size != db.size`) → update `refreshed_at = NOW` and `size = fs.size` (file was externally touched); `first_seen` is left unchanged; no removal action this run
+   - In DB and `refreshed_at` is older than the retention threshold → flag for removal
 5. **Folder atomicity pass**: walk flags upward — if any file in a subtree is flagged for *retention* (i.e., not flagged for removal), clear removal flags on all ancestors up to `<root>` and all other entries under those ancestors
 6. Delete all remaining flagged files, then delete any resulting empty directories (bottom-up)
 
@@ -54,11 +54,14 @@ Single SQLite file at `<root>/.reaper.db`. Always excluded from pruning logic.
 
 ```sql
 CREATE TABLE entries (
-    path       TEXT    PRIMARY KEY,  -- relative to root, forward slashes, no leading slash
-    first_seen INTEGER NOT NULL,     -- Unix epoch seconds; set to NOW on first observation or external touch
-    updated_at INTEGER NOT NULL      -- Unix epoch seconds; last time this row was written
+    path         TEXT    PRIMARY KEY,  -- relative to root, forward slashes, no leading slash
+    first_seen   INTEGER NOT NULL,     -- Unix epoch seconds; set once on first observation, never modified again
+    refreshed_at INTEGER NOT NULL,     -- Unix epoch seconds; the aging clock — drives retention eligibility
+    size         INTEGER NOT NULL      -- last observed byte size; a second, independent touch signal
 );
 ```
+
+`first_seen` and `refreshed_at` are deliberately separate. `first_seen` is a pure audit trail — when Reaper first noticed this path, immutable for the life of the row. `refreshed_at` is what actually ages: it's set equal to `first_seen` on insert, and reset to `NOW` independently whenever an external touch is detected — `first_seen` does not move when that happens. This lets `reap list` show e.g. "first seen Feb 1, refreshed Feb 13, eligible March 13" — legible evidence that something reset the clock on an old file, instead of the touch silently overwriting the file's history. `size` exists purely as a second, independent touch signal (see Core Algorithm) — it does not drive any display or pruning decision on its own.
 
 ## CLI Commands
 
@@ -66,9 +69,10 @@ CREATE TABLE entries (
 |---|---|
 | `reap version` | Print version and build info |
 | `reap status <path>` | Show DB stats: entry count, oldest entry, how many would be pruned at current threshold |
-| `reap preview <path>` | Read-only dry-run: list exactly what would be deleted, grouped by directory. Does **not** update DB timestamps — even files with newer FS timestamps will not have their `first_seen` reset until `execute` runs. |
+| `reap preview <path>` | Read-only dry-run: list exactly what would be deleted, grouped by directory. Does **not** update DB timestamps — even files with newer FS timestamps will not have their `refreshed_at` reset until `execute` runs. |
+| `reap list <path>` | List every tracked entry with `first_seen`, `refreshed_at`, size, age, computed eligibility date, and state. Also shows any Task Scheduler task detected as targeting this folder (name, next/last run) via `Pipeline.PrintScheduleInfo`. |
 | `reap execute <path>` | Perform the prune |
-| `reap touch <root> <target>` | Reset `first_seen` to NOW for `<target>` (file or directory) within the DB at `<root>`. If `<target>` is a directory, resets all entries under it. `<target>` may be absolute or relative to `<root>`. |
+| `reap touch <root> <target>` | Reset `refreshed_at` (the aging clock) to NOW for `<target>` (file or directory) within the DB at `<root>`. `first_seen` is never touched — it stays a fixed record of when Reaper first saw the path. If `<target>` is a directory, resets all entries under it. `<target>` may be absolute or relative to `<root>`. |
 | `reap init <path>` | Create `.reaper.db` and `.reaper.toml` in the target folder without scanning. All other commands (`status`, `preview`, `execute`, `touch`) abort with a clear error if `.reaper.db` does not exist — `init` must be run first. If already initialized, `init` is a no-op (prints a note, exits 0). |
 
 **Common flags** (all commands that take `<path>`):
@@ -128,7 +132,8 @@ Reaper.Tests/
 - **Nested tracked folders**: do *not* explicitly exclude subdirectories that contain their own `.reaper.db`. The outer DB tracks the inner `.reaper.db` as a regular file. When the inner `execute` runs, it updates `.reaper.db`'s modified timestamp; the outer DB detects this as a recent touch and resets the clock, protecting the entire inner subtree via folder atomicity. An abandoned inner DB (whose `execute` is never run) will naturally age out and be cleaned up by the outer DB — explicit exclusion would prevent this and require manual deletion.
 - **Symlinks**: never follow — hardcoded, not configurable. A symlink is tracked as an opaque file entry (it ages, it can be deleted) but Reaper never traverses into a symlinked directory or resolves what a symlink points to. This is a safety invariant, not a preference.
 - **Empty directory deletion**: after file deletions, walk bottom-up and remove any directories that are now empty. This is a separate post-deletion pass, not part of the flagging logic.
-- **`touch` semantics**: `reap touch <root> <target>` updates the DB entry only, not filesystem timestamps. No need to modify FS timestamps.
+- **`touch` semantics**: `reap touch <root> <target>` updates the DB entry only, not filesystem timestamps. No need to modify FS timestamps. Only `refreshed_at` is reset; `first_seen` is immutable everywhere in the codebase, including here.
+- **Size as a touch signal**: `max(created, modified)` can miss a genuine content change if the replacement file's timestamps are preserved from elsewhere (e.g. extracted from an archive that embeds the original modified time) — a real, previously-known gap. `size` is a cheap second signal for exactly this case: it's already returned by the same directory enumeration that reads timestamps, so it costs nothing extra to check, and it doesn't require opening/reading file content the way a content hash would. It won't catch a same-byte-length in-place edit, but that's an acceptable narrow miss for a scratch-folder pruning tool — full content hashing was considered and rejected because it would require reading every tracked file's full content on every `execute` run (real I/O cost, failure-prone on locked files, and it reintroduces the same "reading things has side effects" risk called out for LastAccess above).
 - **Locked files**: do not pre-check file locks before attempting deletion (pre-checks are a TOCTOU race anyway). On deletion failure, treat the file as retained — folder atomicity then protects its ancestors. Do not remove the DB entry unless deletion succeeds. Partial folder deletion is acceptable; the next scheduled run will complete cleanup once the lock is released.
 - **Dual execution context**: the tool runs both interactively (terminal) and unattended (Windows Task Scheduler). Spectre.Console auto-detects TTY and strips rich formatting when stdout is not a terminal — no mode-switching needed. In Task Scheduler, all output is discarded; **exit codes are the only signal**, so all error conditions must return a non-zero exit code even when no one will see the message.
 - **No disk logging**: not in scope. Deletions are not logged to file. The value of an audit trail is low, and `preview` covers the interactive "what would be removed" use case. If a log is ever wanted, redirect stdout from the Task Scheduler action.

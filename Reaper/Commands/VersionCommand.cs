@@ -16,8 +16,15 @@ public sealed class VersionCommand : Command<VersionCommand.Settings>
                      ?? asm.GetName().Version?.ToString()
                      ?? "unknown";
 
+        var buildTimeRaw = asm.GetCustomAttributes<AssemblyMetadataAttribute>()
+                               .FirstOrDefault(a => a.Key == "BuildTime")?.Value;
+        var buildTimeLabel = DateTimeOffset.TryParse(buildTimeRaw, out var buildTime)
+            ? buildTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            : "unknown";
+
         AnsiConsole.MarkupLine($"reap [yellow]{Markup.Escape(version)}[/]");
         AnsiConsole.MarkupLine($"[grey].NET {Environment.Version}[/]");
+        AnsiConsole.MarkupLine($"[grey]Built {buildTimeLabel}[/]");
         return 0;
     }
 }

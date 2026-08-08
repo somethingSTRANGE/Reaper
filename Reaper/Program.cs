@@ -16,6 +16,8 @@ app.Configure(config =>
           .WithDescription("Show tracked-folder stats");
     config.AddCommand<PreviewCommand>("preview")
           .WithDescription("List what would be deleted (read-only)");
+    config.AddCommand<ListCommand>("list")
+          .WithDescription("List all tracked entries with human-readable ages and scheduled-task info");
     config.AddCommand<ExecuteCommand>("execute")
           .WithDescription("Prune expired entries");
     config.AddCommand<TouchCommand>("touch")

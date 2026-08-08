@@ -27,7 +27,7 @@ public static class Scanner
                 {
                     // Symlink or junction: track as an opaque entry, never traverse
                     var reparsePath = Path.GetRelativePath(root, entry.FullName).Replace('\\', '/');
-                    results.Add(new FsEntry(reparsePath, MaxTimestamp(entry)));
+                    results.Add(new FsEntry(reparsePath, MaxTimestamp(entry), Size: 0));
                 }
                 else
                 {
@@ -37,13 +37,20 @@ public static class Scanner
             }
 
             var relativePath = Path.GetRelativePath(root, entry.FullName).Replace('\\', '/');
-            results.Add(new FsEntry(relativePath, MaxTimestamp(entry)));
+            var isFileReparsePoint = entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
+            var size = entry is FileInfo fileInfo && !isFileReparsePoint ? fileInfo.Length : 0;
+            results.Add(new FsEntry(relativePath, MaxTimestamp(entry), size));
         }
     }
 
     private static long MaxTimestamp(FileSystemInfo info)
     {
-        var max = new[] { info.CreationTimeUtc, info.LastWriteTimeUtc, info.LastAccessTimeUtc }.Max();
+        // LastAccessTimeUtc is deliberately excluded: it's meant to be reads-don't-touch-it
+        // per NTFS's DisableLastAccess setting, but that's not reliably true in practice (AV
+        // scans, indexing, and even a plain directory read have been observed to bump it here).
+        // Since it can advance without the file's content or identity actually changing, treating
+        // it as an external-touch signal would perpetually reset first_seen on every scan.
+        var max = new[] { info.CreationTimeUtc, info.LastWriteTimeUtc }.Max();
         return new DateTimeOffset(max).ToUnixTimeSeconds();
     }
 }

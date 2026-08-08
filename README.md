@@ -13,10 +13,10 @@ Windows filesystem timestamps are misleading in too many common situations to be
 - **Same-volume move** — creation and modified timestamps are preserved; the file appears as old as its origin
 - **Cross-volume move** — creation is updated but modified still reflects the original; age is ambiguous
 - **Archive extraction** — modified typically reflects the timestamp stored inside the archive, not when it was extracted
-- **LastAccess** — disabled by default on modern Windows (`NtfsDisableLastAccessUpdate`); reads do not update it
+- **LastAccess** — nominally disabled by default on modern Windows (`NtfsDisableLastAccessUpdate`), but not reliably so in practice; AV scans, indexing, and even routine reads have been observed to update it anyway. Reaper does not use it as a signal.
 - **Folder LastAccess** — reading a file inside a folder does not reliably update the folder's own timestamp
 
-Reaper sidesteps all of this. The `first_seen` timestamp in the database is set to **now** when a file is first observed, and reset to **now** if its filesystem timestamps advance (indicating external modification). Everything else ages from when Reaper first noticed it.
+Reaper sidesteps all of this. The `first_seen` timestamp in the database is set to **now** when a file is first observed, and reset to **now** if its creation or modified timestamp advances (indicating external modification). Everything else ages from when Reaper first noticed it.
 
 ## How it works
 
@@ -26,9 +26,9 @@ On each `execute` run:
 2. Scan all files recursively (excluding `.reaper.db`, `.reaper.toml`, and `desktop.ini` at the root level)
 3. Remove database entries for files that no longer exist
 4. For each file on disk:
-   - Not in database → record with `first_seen = now`; no deletion this run
-   - In database, filesystem timestamps advanced → reset `first_seen = now`; no deletion this run
-   - In database, `first_seen` older than the retention threshold → flag for removal
+   - Not in database → record with `first_seen = now` and `refreshed_at = now`; no deletion this run
+   - In database, filesystem timestamps advanced or file size changed → reset `refreshed_at = now` (`first_seen` is untouched — it's a permanent record of when Reaper first saw the file); no deletion this run
+   - In database, `refreshed_at` older than the retention threshold → flag for removal
 5. **Folder atomicity pass** — if any file in a subtree is retained, clear removal flags on all ancestors and their other contents
 6. Delete flagged files; remove any directories that are now empty
 
@@ -40,9 +40,9 @@ A single retained file protects its entire ancestor chain. You never end up with
 Scratch/
   ProjectFoo/          ← retained (Bar/ is retained)
     Bar/               ← retained (baz.txt is retained)
-      baz.txt          ← first seen 2 days ago → kept
-      old.log          ← first seen 30 days ago → would be removed, but Bar/ is protected
-    other.txt          ← first seen 30 days ago → would be removed, but ProjectFoo/ is protected
+      baz.txt          ← 2 days old → kept
+      old.log          ← 30 days old → would be removed, but Bar/ is protected
+    other.txt          ← 30 days old → would be removed, but ProjectFoo/ is protected
   StaleStuff/          ← all contents expired → deleted
 ```
 
@@ -112,13 +112,17 @@ List exactly which files would be deleted, grouped by directory. Does **not** up
 
 > Preview reflects the current database state. New files and recently modified files are not yet recorded — `execute` may retain more folders than shown here.
 
+### `reap list <path> [flags]`
+
+List every tracked entry with `first_seen`, `refreshed_at`, size, age, computed eligibility date, and current state (retained / protected by folder atomicity / will reap next run). Also shows any Task Scheduler task detected as targeting this folder, with its next/last run time — useful for confirming Reaper is actually scheduled to run before wondering why nothing's been pruned.
+
 ### `reap execute <path> [flags]`
 
 Perform the prune. Reconciles the database with the filesystem, resets clocks on touched files, then deletes anything that has aged out. Pass `--dry-run` to get preview output without making any changes.
 
 ### `reap touch <root> <target>`
 
-Reset `first_seen` to now for a specific file or directory within the database at `<root>`. If `<target>` is a directory, all entries under it are reset. `<target>` may be an absolute path or relative to `<root>`.
+Reset the aging clock (`refreshed_at`) to now for a specific file or directory within the database at `<root>`. `first_seen` is never modified — it stays a permanent record of when Reaper first saw the path. If `<target>` is a directory, all entries under it are reset. `<target>` may be an absolute path or relative to `<root>`.
 
 Useful for protecting a folder from pruning without modifying any files inside it.
 
@@ -157,7 +161,9 @@ CLI flags override config file values.
 
 ## Design notes
 
-**First run** — the first `execute` on a freshly initialised folder records all files with `first_seen = now` and deletes nothing. Reaper needs at least one full retention period of observation before it removes anything.
+**First run** — the first `execute` on a freshly initialised folder records all files with `first_seen = now` and `refreshed_at = now`, and deletes nothing. Reaper needs at least one full retention period of observation before it removes anything.
+
+**`first_seen` vs `refreshed_at`** — `first_seen` is set once and never changes again; it's a pure audit trail. `refreshed_at` is the actual aging clock: it starts equal to `first_seen`, and resets independently whenever an external touch is detected. `reap list` shows both, plus the computed eligibility date, so you can see e.g. a file first seen a month ago whose clock was refreshed last week — evidence something touched it, without losing the original history.
 
 **Symlinks** — never followed. A symlink is tracked as an opaque file (it ages, it can be deleted) but Reaper never traverses into a symlinked directory or resolves the target. This is a hard invariant, not a configuration option.
 
@@ -167,7 +173,7 @@ CLI flags override config file values.
 
 **Protected paths** — Reaper refuses to operate on system directories. Drive roots and the following paths are blocked, along with everything underneath them: `%WINDIR%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, and `%ProgramData%`. `%USERPROFILE%` itself is also blocked, but its subdirectories are not — `%USERPROFILE%\Temp`, `%USERPROFILE%\Scratch`, `%USERPROFILE%\Downloads`, and similar are the primary intended use cases.
 
-**Replacing files with older versions** — if a file is overwritten with a version whose filesystem timestamps are older than the current `first_seen` value in the database, Reaper will not detect this as a modification and will not reset the clock. The file will continue aging from its original `first_seen`. This is a known limitation of the timestamp-comparison heuristic.
+**Replacing files with older versions** — Reaper also compares file size, which catches most cases where a file is overwritten with a version whose timestamps are preserved from elsewhere (e.g. extracted from an archive) but whose byte size differs. It won't catch a same-size in-place edit with preserved timestamps — a narrow remaining gap. Full content hashing would close it but requires reading every tracked file on every run, which trades away the cheap metadata-only scan for a real, ongoing I/O cost; not worth it for a scratch-folder pruning tool.
 
 **Inspecting the database** — `.reaper.db` is a standard unencrypted SQLite file. You can open it with [DB Browser for SQLite](https://sqlitebrowser.org/) or query it with the `sqlite3` command-line tool.
 

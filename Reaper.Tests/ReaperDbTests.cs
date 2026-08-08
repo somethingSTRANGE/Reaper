@@ -22,7 +22,7 @@ public class ReaperDbTests
     [Test]
     public void Upsert_inserts_new_entry()
     {
-        var entry = new Entry("foo/bar.txt", 1000L, 2000L);
+        var entry = new Entry("foo/bar.txt", 1000L, 2000L, 500L);
         _db.Upsert([entry]);
         var all = _db.GetAll();
         Assert.That(all, Has.Count.EqualTo(1));
@@ -30,22 +30,31 @@ public class ReaperDbTests
     }
 
     [Test]
-    public void Upsert_updates_existing_entry()
+    public void Upsert_updates_refreshed_at_and_size_for_existing_entry()
     {
-        _db.Upsert([new Entry("foo/bar.txt", 1000L, 2000L)]);
-        _db.Upsert([new Entry("foo/bar.txt", 3000L, 4000L)]);
+        _db.Upsert([new Entry("foo/bar.txt", 1000L, 2000L, 500L)]);
+        _db.Upsert([new Entry("foo/bar.txt", 1000L, 4000L, 900L)]);
         var all = _db.GetAll();
         Assert.That(all, Has.Count.EqualTo(1));
-        Assert.That(all[0], Is.EqualTo(new Entry("foo/bar.txt", 3000L, 4000L)));
+        Assert.That(all[0], Is.EqualTo(new Entry("foo/bar.txt", 1000L, 4000L, 900L)));
+    }
+
+    [Test]
+    public void Upsert_never_overwrites_first_seen_on_conflict()
+    {
+        _db.Upsert([new Entry("foo/bar.txt", 1000L, 2000L, 500L)]);
+        _db.Upsert([new Entry("foo/bar.txt", 3000L, 4000L, 500L)]);
+        var entry = _db.GetAll().Single();
+        Assert.That(entry.FirstSeen, Is.EqualTo(1000L));
     }
 
     [Test]
     public void Upsert_inserts_multiple_entries()
     {
         _db.Upsert([
-            new Entry("a.txt", 1000L, 2000L),
-            new Entry("b.txt", 1001L, 2001L),
-            new Entry("c.txt", 1002L, 2002L),
+            new Entry("a.txt", 1000L, 2000L, 10L),
+            new Entry("b.txt", 1001L, 2001L, 20L),
+            new Entry("c.txt", 1002L, 2002L, 30L),
         ]);
         Assert.That(_db.GetAll(), Has.Count.EqualTo(3));
     }
@@ -53,7 +62,7 @@ public class ReaperDbTests
     [Test]
     public void Delete_removes_entry()
     {
-        _db.Upsert([new Entry("foo/bar.txt", 1000L, 2000L)]);
+        _db.Upsert([new Entry("foo/bar.txt", 1000L, 2000L, 500L)]);
         _db.Delete(["foo/bar.txt"]);
         Assert.That(_db.GetAll(), Is.Empty);
     }
@@ -65,36 +74,36 @@ public class ReaperDbTests
     }
 
     [Test]
-    public void Touch_updates_first_seen_for_exact_path()
+    public void Touch_resets_refreshed_at_but_not_first_seen()
     {
-        _db.Upsert([new Entry("a.txt", 1000L, 2000L)]);
+        _db.Upsert([new Entry("a.txt", 1000L, 2000L, 500L)]);
         _db.Touch("a.txt", 5000L);
         var entry = _db.GetAll().Single();
-        Assert.That(entry.FirstSeen, Is.EqualTo(5000L));
-        Assert.That(entry.UpdatedAt, Is.EqualTo(5000L));
+        Assert.That(entry.FirstSeen, Is.EqualTo(1000L));
+        Assert.That(entry.RefreshedAt, Is.EqualTo(5000L));
     }
 
     [Test]
     public void Touch_updates_all_entries_under_directory()
     {
         _db.Upsert([
-            new Entry("Foo/a.txt", 1000L, 2000L),
-            new Entry("Foo/b.txt", 1001L, 2001L),
-            new Entry("Bar/c.txt", 1002L, 2002L),
+            new Entry("Foo/a.txt", 1000L, 2000L, 10L),
+            new Entry("Foo/b.txt", 1001L, 2001L, 20L),
+            new Entry("Bar/c.txt", 1002L, 2002L, 30L),
         ]);
         _db.Touch("Foo", 5000L);
         var all = _db.GetAll().OrderBy(e => e.Path).ToList();
-        Assert.That(all[0].FirstSeen, Is.EqualTo(1002L));   // Bar/c.txt — unchanged
-        Assert.That(all[1].FirstSeen, Is.EqualTo(5000L));   // Foo/a.txt
-        Assert.That(all[2].FirstSeen, Is.EqualTo(5000L));   // Foo/b.txt
+        Assert.That(all[0].RefreshedAt, Is.EqualTo(2002L));   // Bar/c.txt — unchanged
+        Assert.That(all[1].RefreshedAt, Is.EqualTo(5000L));   // Foo/a.txt
+        Assert.That(all[2].RefreshedAt, Is.EqualTo(5000L));   // Foo/b.txt
     }
 
     [Test]
     public void Touch_returns_count_of_affected_rows()
     {
         _db.Upsert([
-            new Entry("Foo/a.txt", 1000L, 2000L),
-            new Entry("Foo/b.txt", 1001L, 2001L),
+            new Entry("Foo/a.txt", 1000L, 2000L, 10L),
+            new Entry("Foo/b.txt", 1001L, 2001L, 20L),
         ]);
         var count = _db.Touch("Foo", 5000L);
         Assert.That(count, Is.EqualTo(2));
@@ -110,9 +119,9 @@ public class ReaperDbTests
     public void Delete_removes_multiple_entries_and_leaves_remainder()
     {
         _db.Upsert([
-            new Entry("a.txt", 1000L, 2000L),
-            new Entry("b.txt", 1001L, 2001L),
-            new Entry("c.txt", 1002L, 2002L),
+            new Entry("a.txt", 1000L, 2000L, 10L),
+            new Entry("b.txt", 1001L, 2001L, 20L),
+            new Entry("c.txt", 1002L, 2002L, 30L),
         ]);
         _db.Delete(["a.txt", "c.txt"]);
         var remaining = _db.GetAll();

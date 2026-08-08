@@ -24,20 +24,22 @@ public sealed class StatusCommand : Command<StatusCommand.Settings>
         var pruneCount = Pruner.FlagForRemoval(entries, retention, now).Count;
 
         var oldestLabel = entries.Count > 0
-            ? DateTimeOffset.FromUnixTimeSeconds(entries.Min(e => e.FirstSeen))
+            ? DateTimeOffset.FromUnixTimeSeconds(entries.Min(e => e.RefreshedAt))
                             .LocalDateTime.ToString("yyyy-MM-dd")
             : "—";
 
         var table = new Table().Border(TableBorder.None).HideHeaders();
         table.AddColumn(new TableColumn("").RightAligned());
         table.AddColumn("");
-        table.AddRow("[grey]Target[/]",          Markup.Escape(root));
-        table.AddRow("[grey]Tracked entries[/]",  entries.Count.ToString());
-        table.AddRow("[grey]Oldest entry[/]",     oldestLabel);
-        table.AddRow("[grey]Retention[/]",        $"{config.RetentionDays}d");
-        table.AddRow("[grey]Would prune[/]",      $"[yellow]{pruneCount}[/] file(s)");
+        table.AddRow("[grey]Target[/]",             Markup.Escape(root));
+        table.AddRow("[grey]Tracked entries[/]",     entries.Count.ToString());
+        table.AddRow("[grey]Oldest (by clock)[/]",   oldestLabel);
+        table.AddRow("[grey]Retention[/]",           $"{config.RetentionDays}d");
+        table.AddRow("[grey]Would prune[/]",         $"[yellow]{pruneCount}[/] file(s)");
 
         AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+        Pipeline.PrintScheduleInfo(root);
         return 0;
     }
 }

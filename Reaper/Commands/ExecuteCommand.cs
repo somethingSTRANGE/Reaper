@@ -47,13 +47,14 @@ public sealed class ExecuteCommand : Command<ExecuteCommand.Settings>
         {
             if (!dbMap.TryGetValue(path, out var dbEntry))
             {
-                var e = new Entry(path, now, now);
+                var e = new Entry(path, now, now, fsEntry.Size);
                 toUpsert.Add(e);
                 dbMap[path] = e;
             }
-            else if (fsEntry.MaxTimestamp > dbEntry.FirstSeen)
+            else if (fsEntry.MaxTimestamp > dbEntry.RefreshedAt || fsEntry.Size != dbEntry.Size)
             {
-                var e = new Entry(path, now, now);
+                // first_seen carries forward unchanged — only the aging clock resets
+                var e = new Entry(path, dbEntry.FirstSeen, now, fsEntry.Size);
                 toUpsert.Add(e);
                 dbMap[path] = e;
             }

@@ -2,6 +2,7 @@ using Reaper.Config;
 using Reaper.Db;
 using Reaper.Pruning;
 using Reaper.Safety;
+using Reaper.Scheduling;
 using Spectre.Console;
 
 namespace Reaper.Commands;
@@ -45,6 +46,27 @@ public static class Pipeline
         return Path.GetRelativePath(absoluteRoot, abs).Replace('\\', '/');
     }
 
+    public static void PrintScheduleInfo(string absoluteRoot)
+    {
+        var tasks = ScheduledTaskLocator.FindTasksTargeting(absoluteRoot);
+
+        if (tasks.Count == 0)
+        {
+            AnsiConsole.MarkupLine(
+                "[red]Warning:[/] [grey]no Task Scheduler task targets this folder — reap will not run automatically.[/]");
+            return;
+        }
+
+        foreach (var task in tasks)
+        {
+            AnsiConsole.MarkupLine(
+                $"[grey]Scheduled task[/] [blue]{Markup.Escape(task.Name)}[/] " +
+                $"[grey]— next run:[/] {Markup.Escape(task.NextRunTime ?? "—")} " +
+                $"[grey]last run:[/] {Markup.Escape(task.LastRunTime ?? "—")} " +
+                $"[grey]result:[/] {Markup.Escape(task.LastResult ?? "—")}");
+        }
+    }
+
     public static int Preview(string absoluteRoot, ReaperConfig config)
     {
         var now       = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -80,7 +102,7 @@ public static class Pipeline
             }
 
             var age = byEntry.TryGetValue(path, out var entry)
-                ? (int)((now - entry.FirstSeen) / 86_400)
+                ? (int)((now - entry.RefreshedAt) / 86_400)
                 : 0;
             AnsiConsole.MarkupLine(
                 $"{new string(' ', parts.Length * 2)}{Markup.Escape(parts[^1])}  [grey]{age}d[/]");

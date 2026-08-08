@@ -11,7 +11,7 @@ public class PrunerTests
     private const long SevenDays = 7 * Day;
 
     private static Entry Aged(string path, int days) =>
-        new(path, Now - days * Day, Now);
+        new(path, Now, Now - days * Day, Size: 0);
 
     [Test]
     public void Fresh_entry_is_not_flagged()

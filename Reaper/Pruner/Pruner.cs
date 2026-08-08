@@ -10,7 +10,7 @@ public static class Pruner
         var all = entries.ToList();
 
         var flagged = all
-            .Where(e => nowSeconds - e.FirstSeen > retentionSeconds)
+            .Where(e => nowSeconds - e.RefreshedAt > retentionSeconds)
             .Select(e => e.Path)
             .ToHashSet();
 
